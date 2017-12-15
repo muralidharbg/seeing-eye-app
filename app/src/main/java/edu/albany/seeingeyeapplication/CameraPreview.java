@@ -11,7 +11,6 @@ import android.graphics.YuvImage;
 import android.hardware.Camera;
 import android.graphics.Canvas;
 import android.graphics.Rect;
-import android.media.ExifInterface;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Environment;
@@ -69,6 +68,7 @@ public class CameraPreview extends SurfaceView implements SurfaceHolder.Callback
     private int previewWidth;
     private int previewHeight;
     private APIService apiService;
+    private boolean isPreviewRunning = false;
 
     public CameraPreview(Context context, Camera camera) {
         super(context);
@@ -82,6 +82,8 @@ public class CameraPreview extends SurfaceView implements SurfaceHolder.Callback
         mHolder.setType(SurfaceHolder.SURFACE_TYPE_PUSH_BUFFERS);
         mContext = context;
         previewHeight = previewWidth = 0;
+
+        apiService = ApiUtils.getAPIService();
     }
 
     public void surfaceCreated(SurfaceHolder holder) {
@@ -110,6 +112,11 @@ public class CameraPreview extends SurfaceView implements SurfaceHolder.Callback
     }
 
     public void surfaceChanged(SurfaceHolder holder, int format, int w, int h) {
+
+        if(isPreviewRunning){
+            Log.d(TAG, "surfaceChanged: asdasdasd");
+            mCamera.stopPreview();
+        }
         // If your preview can change or rotate, take care of those events here.
         // Make sure to stop the preview before resizing or reformatting it.
 
@@ -154,35 +161,37 @@ public class CameraPreview extends SurfaceView implements SurfaceHolder.Callback
             }
             mParameters.setPreviewFormat(JPEG);
             mCamera.setPreviewDisplay(mHolder);
-            mCamera.startPreview();
+            previewCamera();
            // mCamera.setPreviewCallback(this);
 
         } catch (Exception e){
             Log.d(TAG, "Error starting camera preview: " + e.getMessage());
         }
     }
+
     private void createAPI()
     {
         Gson gson = new GsonBuilder().setDateFormat("yyyy-MM-dd'T'HH:mm:ssZ").create();
         Retrofit retrofit = new Retrofit.Builder().baseUrl(ApiUtils.BASE_URL).addConverterFactory(GsonConverterFactory.create(gson)).build();
-        apiService = retrofit.create(APIService.class);
+//        apiService = retrofit.create(APIService.class);
     }
+
     public void sendPost(MultipartBody.Part file) {
-        apiService.postFile(file).enqueue(new Callback<Post>() {
-            @Override
-            public void onResponse(Call<Post> call, Response<Post> response) {
-
-                if(response.isSuccessful()) {
-                    showResponse(response.body().toString());
-                    Log.i(TAG, "post submitted to API." + response.body().toString());
-                }
-            }
-
-            @Override
-            public void onFailure(Call<Post> call, Throwable t) {
-                Log.e(TAG, "Unable to submit post to API.");
-            }
-        });
+//        apiService.postFile(file).enqueue(new Callback<Post>() {
+//            @Override
+//            public void onResponse(Call<Post> call, Response<Post> response) {
+//
+//                if(response.isSuccessful()) {
+//                    showResponse(response.body().toString());
+//                    Log.i(TAG, "post submitted to API." + response.body().toString());
+//                }
+//            }
+//
+//            @Override
+//            public void onFailure(Call<Post> call, Throwable t) {
+//                Log.e(TAG, "Unable to submit post to API.");
+//            }
+//        });
     }
 
     public void showResponse(String response) {
@@ -215,6 +224,7 @@ public class CameraPreview extends SurfaceView implements SurfaceHolder.Callback
     @Override
     public void onPictureTaken(byte[] data, Camera camera) {
 //        Log.d(TAG, "onPreviewFrame: "+ mParameters.getPreviewFormat());
+        Log.d("MainActivity", "takepicture");
         Display display = ((WindowManager) mContext.getSystemService(mContext.WINDOW_SERVICE)).getDefaultDisplay();
         int rotation = display.getRotation();
         try {
@@ -260,9 +270,10 @@ public class CameraPreview extends SurfaceView implements SurfaceHolder.Callback
                 fos.flush();
                 fos.close();
 
-                createAPI();
-                MultipartBody.Part filePart = MultipartBody.Part.createFormData("file", pictureFile.getName(), RequestBody.create(MediaType.parse("image/*"), pictureFile));
-                apiService.postFile(filePart);
+//                createAPI();
+//                MultipartBody.Part filePart = MultipartBody.Part.createFormData("file", pictureFile.getName(), RequestBody.create(MediaType.parse("image/*"), pictureFile));
+//                apiService.postFile(filePart);
+
 
 
 
@@ -430,5 +441,15 @@ public class CameraPreview extends SurfaceView implements SurfaceHolder.Callback
             }
         }
         return YUVrotate180(YUVrotate90(yuv, imageWidth, imageHeight), imageWidth, imageHeight);
+    }
+
+    public void previewCamera() {
+        try {
+            mCamera.setPreviewDisplay(mHolder);
+            mCamera.startPreview();
+            isPreviewRunning = true;
+        } catch(Exception e) {
+            Log.d(TAG, "Cannot start preview", e);
+        }
     }
 }

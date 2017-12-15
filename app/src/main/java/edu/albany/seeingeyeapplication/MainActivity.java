@@ -1,12 +1,16 @@
 package edu.albany.seeingeyeapplication;
 
 import android.Manifest;
+import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.Context;
+import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.hardware.Camera;
 import android.hardware.camera2.CameraAccessException;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Environment;
 import android.provider.Settings;
 import android.support.annotation.NonNull;
@@ -14,6 +18,7 @@ import android.support.v4.app.ActivityCompat;
 import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
+import android.text.TextUtils;
 import android.util.Log;
 import android.view.View;
 import android.widget.Button;
@@ -33,6 +38,12 @@ import static android.provider.MediaStore.Files.FileColumns.MEDIA_TYPE_IMAGE;
 
 import edu.albany.seeingeyeapplication.data.model.*;
 import edu.albany.seeingeyeapplication.data.remote.*;
+import okhttp3.MediaType;
+import okhttp3.MultipartBody;
+import okhttp3.RequestBody;
+import retrofit2.Call;
+import retrofit2.Callback;
+import retrofit2.Response;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -43,12 +54,13 @@ public class MainActivity extends AppCompatActivity {
     public static final int MEDIA_TYPE_IMAGE = 1;
     public static final int MEDIA_TYPE_VIDEO = 2;
     boolean loop;
+    private APIService apiService;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
-
+        apiService = ApiUtils.getAPIService();
         if (!checkPermissions()) {
             requestPermissions();
         }
@@ -203,6 +215,64 @@ public class MainActivity extends AppCompatActivity {
                     }
                     preview.removeView(mPreview);
                     preview.addView(mPreview);
+                    if(pictureFile == null){
+                        Log.d(TAG, "onPictureTaken: picturefile is null");
+                    }
+                    // create RequestBody instance from file
+                    RequestBody requestFile =
+                            RequestBody.create(
+                                    MediaType.parse("image/jpg"),
+                                    pictureFile
+                            );
+
+                    // MultipartBody.Part is used to send also the actual file name
+                    MultipartBody.Part body =
+                            MultipartBody.Part.createFormData("file", pictureFile.getName(), requestFile);
+
+                    apiService.postFile(body).enqueue(new Callback<Post>() {
+                        @Override
+                        public void onResponse(Call<Post> call, Response<Post> response) {
+                            Log.d("MainActivity", "response");
+                            if(response.isSuccessful()) {
+
+//                            mAdapter.updateAnswers(response.body().getItems());
+                                System.out.println((response.body().getContent().toString()));
+                                Log.d("MainActivity", "posts loaded from API");
+
+                                AlertDialog.Builder builder;
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                                    builder = new AlertDialog.Builder(MainActivity.this, android.R.style.Theme_Material_Dialog_Alert);
+                                } else {
+                                    builder = new AlertDialog.Builder(MainActivity.this);
+                                }
+                                builder.setTitle("Response")
+                                        .setMessage(TextUtils.join(", ", response.body().getContent()))
+                                        .setPositiveButton(android.R.string.yes, new DialogInterface.OnClickListener() {
+                                            public void onClick(DialogInterface dialog, int which) {
+                                                // continue with delete
+                                            }
+                                        })
+                                        .setNegativeButton(android.R.string.no, new DialogInterface.OnClickListener() {
+                                            public void onClick(DialogInterface dialog, int which) {
+                                                // do nothing
+                                            }
+                                        })
+                                        .setIcon(android.R.drawable.ic_dialog_alert)
+                                        .show();
+                            }else {
+                                int statusCode  = response.code();
+                                // handle request errors depending on status code
+                                Log.d(TAG, "onResponse: error");
+                            }
+                        }
+
+                        @Override
+                        public void onFailure(Call<Post> call, Throwable t) {
+//                        showErrorMessage();
+                            Log.d("MainActivity", "error loading from API");
+
+                        }
+                    });
                 }
             };
 

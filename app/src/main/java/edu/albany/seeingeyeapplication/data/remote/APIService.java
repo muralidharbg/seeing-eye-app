@@ -17,8 +17,8 @@ public interface APIService
 {
     @Multipart
     @POST("detect-object")
-
-    Call<Post> postFile(@Part MultipartBody.Part filePart);
+    Call<Post> postFile(@Part MultipartBody.Part image);
+//    Call<Post> postFile(@Part("full_name") RequestBody fullName, @Part MultipartBody.Part image);
 
 
 }
