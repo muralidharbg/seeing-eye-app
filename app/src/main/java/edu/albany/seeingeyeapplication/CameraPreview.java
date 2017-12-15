@@ -1,6 +1,8 @@
 package edu.albany.seeingeyeapplication;
 
+import android.app.AlertDialog;
 import android.content.Context;
+import android.content.DialogInterface;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.ImageFormat;
@@ -11,6 +13,7 @@ import android.graphics.Canvas;
 import android.graphics.Rect;
 import android.media.ExifInterface;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Environment;
 import android.util.AttributeSet;
 import android.util.Log;
@@ -18,7 +21,11 @@ import android.view.Display;
 import android.view.Surface;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
+import android.view.View;
 import android.view.WindowManager;
+
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -35,11 +42,23 @@ import static android.content.Context.WINDOW_SERVICE;
 import static android.provider.MediaStore.Files.FileColumns.MEDIA_TYPE_IMAGE;
 import static java.util.Collections.rotate;
 
+import edu.albany.seeingeyeapplication.data.remote.*;
+import edu.albany.seeingeyeapplication.data.model.*;
+import okhttp3.MediaType;
+import okhttp3.MultipartBody;
+import okhttp3.RequestBody;
+import retrofit2.Call;
+import retrofit2.Callback;
+import retrofit2.Response;
+import retrofit2.Retrofit;
+import retrofit2.converter.gson.GsonConverterFactory;
+import retrofit2.http.Multipart;
+
 /**
  * Created by muralidhar on 20/10/17.
  */
 
-public class CameraPreview extends SurfaceView implements SurfaceHolder.Callback, Camera.PreviewCallback {
+public class CameraPreview extends SurfaceView implements SurfaceHolder.Callback, Camera.PictureCallback{
     private SurfaceHolder mHolder;
     private Camera mCamera;
     private Camera.Parameters mParameters;
@@ -49,6 +68,7 @@ public class CameraPreview extends SurfaceView implements SurfaceHolder.Callback
     private Context mContext;
     private int previewWidth;
     private int previewHeight;
+    private APIService apiService;
 
     public CameraPreview(Context context, Camera camera) {
         super(context);
@@ -71,7 +91,7 @@ public class CameraPreview extends SurfaceView implements SurfaceHolder.Callback
                 mParameters.setPreviewFormat(JPEG);
                 mCamera.setPreviewDisplay(holder);
                 mCamera.startPreview();
-                mCamera.setPreviewCallback(this);
+                //mCamera.setPreviewCallback(this);
             }
         } catch (IOException e) {
             Log.d(TAG, "Error setting camera preview: " + e.getMessage());
@@ -135,15 +155,65 @@ public class CameraPreview extends SurfaceView implements SurfaceHolder.Callback
             mParameters.setPreviewFormat(JPEG);
             mCamera.setPreviewDisplay(mHolder);
             mCamera.startPreview();
-            mCamera.setPreviewCallback(this);
+           // mCamera.setPreviewCallback(this);
 
         } catch (Exception e){
             Log.d(TAG, "Error starting camera preview: " + e.getMessage());
         }
     }
+    private void createAPI()
+    {
+        Gson gson = new GsonBuilder().setDateFormat("yyyy-MM-dd'T'HH:mm:ssZ").create();
+        Retrofit retrofit = new Retrofit.Builder().baseUrl(ApiUtils.BASE_URL).addConverterFactory(GsonConverterFactory.create(gson)).build();
+        apiService = retrofit.create(APIService.class);
+    }
+    public void sendPost(MultipartBody.Part file) {
+        apiService.postFile(file).enqueue(new Callback<Post>() {
+            @Override
+            public void onResponse(Call<Post> call, Response<Post> response) {
+
+                if(response.isSuccessful()) {
+                    showResponse(response.body().toString());
+                    Log.i(TAG, "post submitted to API." + response.body().toString());
+                }
+            }
+
+            @Override
+            public void onFailure(Call<Post> call, Throwable t) {
+                Log.e(TAG, "Unable to submit post to API.");
+            }
+        });
+    }
+
+    public void showResponse(String response) {
+        //if(mResponseTv.getVisibility() == View.GONE) {
+        //    mResponseTv.setVisibility(View.VISIBLE);
+        //}
+        //mResponseTv.setText(response);
+        AlertDialog.Builder builder;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            builder = new AlertDialog.Builder(mContext, android.R.style.Theme_Material_Dialog_Alert);
+        } else {
+            builder = new AlertDialog.Builder(mContext);
+        }
+        builder.setTitle("Response")
+                .setMessage(response)
+                .setPositiveButton(android.R.string.yes, new DialogInterface.OnClickListener() {
+                    public void onClick(DialogInterface dialog, int which) {
+                        // continue with delete
+                    }
+                })
+                .setNegativeButton(android.R.string.no, new DialogInterface.OnClickListener() {
+                    public void onClick(DialogInterface dialog, int which) {
+                        // do nothing
+                    }
+                })
+                .setIcon(android.R.drawable.ic_dialog_alert)
+                .show();
+    }
 
     @Override
-    public void onPreviewFrame(byte[] data, Camera camera) {
+    public void onPictureTaken(byte[] data, Camera camera) {
 //        Log.d(TAG, "onPreviewFrame: "+ mParameters.getPreviewFormat());
         Display display = ((WindowManager) mContext.getSystemService(mContext.WINDOW_SERVICE)).getDefaultDisplay();
         int rotation = display.getRotation();
@@ -189,6 +259,13 @@ public class CameraPreview extends SurfaceView implements SurfaceHolder.Callback
                 boolean status = bitmapCameraImage.compress(Bitmap.CompressFormat.JPEG, 100, fos);
                 fos.flush();
                 fos.close();
+
+                createAPI();
+                MultipartBody.Part filePart = MultipartBody.Part.createFormData("file", pictureFile.getName(), RequestBody.create(MediaType.parse("image/*"), pictureFile));
+                apiService.postFile(filePart);
+
+
+
             } else{
                 Log.d(TAG, "onPreviewFrame: bitmap is null");
             }
@@ -211,11 +288,18 @@ public class CameraPreview extends SurfaceView implements SurfaceHolder.Callback
 //            }
 
 //            Log.d(TAG, "onPreviewFrame: compress status is " + status);
+
+            //File file = // initialize file here
+
+
+
+
         } catch (FileNotFoundException e) {
             Log.d(TAG, "Error saving the file");
         } catch (IOException e) {
             Log.d(TAG, "Error saving the file");
         }
+
     }
 
     /** Create a file Uri for saving an image or video */

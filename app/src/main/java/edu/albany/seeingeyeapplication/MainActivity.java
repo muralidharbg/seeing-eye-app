@@ -31,6 +31,9 @@ import java.util.List;
 import static android.content.ContentValues.TAG;
 import static android.provider.MediaStore.Files.FileColumns.MEDIA_TYPE_IMAGE;
 
+import edu.albany.seeingeyeapplication.data.model.*;
+import edu.albany.seeingeyeapplication.data.remote.*;
+
 public class MainActivity extends AppCompatActivity {
 
     private Camera mCamera;
